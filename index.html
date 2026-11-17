@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SIGHTLINE // 2D Sketch CCTV &amp; Blind-Spot Planner</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --paper: #f5f2eb;
+      --surface: #fbf9f4;
+      --ink: #1b1a17;
+      --ink-soft: #57544c;
+      --ink-muted: #8a8479;
+      --border: rgba(27, 26, 23, 0.17);
+      --grid: rgba(27, 26, 23, 0.06);
+      --hover: rgba(27, 26, 23, 0.06);
+      --fov-fill: rgba(27, 26, 23, 0.13);
+      --fov-stroke: rgba(27, 26, 23, 0.55);
+      --accent: #c83e2b;
+    }
+
+    body.theme-charcoal {
+      --paper: #141413;
+      --surface: #1c1c1a;
+      --ink: #f0ede6;
+      --ink-soft: #b2ada2;
+      --ink-muted: #78736a;
+      --border: rgba(240, 237, 230, 0.17);
+      --grid: rgba(240, 237, 230, 0.05);
+      --hover: rgba(240, 237, 230, 0.08);
+      --fov-fill: rgba(240, 237, 230, 0.14);
+      --fov-stroke: rgba(240, 237, 230, 0.58);
+      --accent: #e05a47;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--paper);
+      color: var(--ink);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    .font-mono-tech { font-family: 'JetBrains Mono', monospace; }
+
+    .paper-grain {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 50;
+      opacity: 0.04;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    .sketch-box {
+      background-color: var(--surface);
+      border: 1px solid var(--border);
+      box-shadow: 2px 3px 0px rgba(0, 0, 0, 0.08);
+    }
+
+    .sketch-btn {
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      transition: background-color 0.14s ease, transform 0.1s ease;
+    }
+    .sketch-btn:hover { background-color: var(--hover); }
+    .sketch-btn:active { transform: translateY(1px); }
+    .sketch-btn.active {
+      background-color: var(--ink);
+      color: var(--paper);
+      border-color: var(--ink);
+    }
+
+    .sketch-input {
+      background-color: var(--paper);
+      color: var(--ink);
+      border: 1px solid var(--border);
+      outline: none;
+    }
+
+    input[type="range"].sketch-range {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 2px;
+      background: var(--border);
+      outline: none;
+    }
+    input[type="range"].sketch-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--ink);
+      border: 2px solid var(--paper);
+      box-shadow: 0 0 0 1px var(--ink);
+      cursor: pointer;
+    }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="flex flex-col">
+  <div class="paper-grain" aria-hidden="true"></div>
+
+  <!-- TOP BAR -->
+  <header class="relative z-30 border-b px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2" style="background-color: var(--surface); border-color: var(--border);">
+    <div class="flex items-center gap-3">
+      <div class="font-mono-tech text-sm font-semibold tracking-tight">
+        SIGHTLINE <span style="color: var(--accent);">//</span> 2D CCTV PLANNER
+      </div>
+      <select id="select-preset" class="sketch-input rounded px-2 py-1 text-xs font-mono-tech">
+        <option value="house">Sample: 2BHK House</option>
+        <option value="retail">Sample: Retail Store</option>
+        <option value="blank">Blank Drafting Sheet</option>
+      </select>
+    </div>
+
+    <!-- Primary Tools -->
+    <div class="flex flex-wrap items-center gap-1">
+      <button type="button" data-tool="select" class="sketch-btn active rounded px-2.5 py-1 text-xs font-mono-tech">Select / Aim</button>
+      <button type="button" data-tool="add-cam" class="sketch-btn rounded px-2.5 py-1 text-xs font-mono-tech">+ Camera</button>
+      <button type="button" data-tool="draw-wall" class="sketch-btn rounded px-2.5 py-1 text-xs font-mono-tech">Draw Wall</button>
+      <button type="button" data-tool="erase-wall" class="sketch-btn rounded px-2.5 py-1 text-xs font-mono-tech">Erase Wall</button>
+    </div>
+
+    <!-- Display Toggles & Export -->
+    <div class="flex flex-wrap items-center gap-1">
+      <button id="btn-ir" type="button" class="sketch-btn rounded px-2.5 py-1 text-xs font-mono-tech">Daylight</button>
+      <button id="btn-cables" type="button" class="sketch-btn active rounded px-2.5 py-1 text-xs font-mono-tech">PoE Cables</button>
+      <button id="btn-snap" type="button" class="sketch-btn active rounded px-2.5 py-1 text-xs font-mono-tech">Snap: On</button>
+      <button id="btn-export-png" type="button" class="sketch-btn rounded px-2.5 py-1 text-xs font-mono-tech">Export PNG</button>
+      <button id="btn-theme" type="button" class="sketch-btn rounded px-2.5 py-1 text-xs font-mono-tech">Paper</button>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE -->
+  <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+    <!-- 2D ARCHITECTURAL DRAFTING CANVAS -->
+    <main id="canvas-wrap" class="relative flex-1 h-full overflow-hidden">
+      <canvas id="plan-canvas" class="block w-full h-full touch-none"></canvas>
+
+      <!-- Floating Coverage HUD (Top-Left of Canvas) -->
+      <div class="absolute top-3 left-3 z-20 sketch-box rounded-lg px-3 py-2 pointer-events-none flex flex-wrap items-center gap-4 text-xs font-mono-tech">
+        <div>
+          <span class="text-[10px] block" style="color: var(--ink-muted);">INTERIOR COVERAGE</span>
+          <strong id="hud-coverage" class="text-sm">0%</strong>
+        </div>
+        <div>
+          <span class="text-[10px] block" style="color: var(--ink-muted);">OVERLAP</span>
+          <strong id="hud-overlap" class="text-sm">0%</strong>
+        </div>
+        <div>
+          <span class="text-[10px] block" style="color: var(--ink-muted);">BLIND SPOTS</span>
+          <strong id="hud-blind" class="text-sm" style="color: var(--accent);">0%</strong>
+        </div>
+        <div>
+          <span class="text-[10px] block" style="color: var(--ink-muted);">CAT6 CABLE</span>
+          <strong id="hud-cable" class="text-sm">0 m</strong>
+        </div>
+      </div>
+
+      <!-- Bottom Hint -->
+      <div class="absolute bottom-3 left-3 z-20 sketch-box rounded-md px-2.5 py-1 text-[10px] font-mono-tech pointer-events-none" style="color: var(--ink-muted);">
+        Drag camera body to move · Drag aim handle to rotate · Walls cast real vision shadows
+      </div>
+
+      <!-- Mobile Inspector Toggle -->
+      <button id="btn-mobile-panel" type="button" class="lg:hidden absolute bottom-3 right-3 z-20 sketch-box sketch-btn rounded-md px-3 py-1.5 text-xs font-mono-tech">
+        Inspector ▴
+      </button>
+    </main>
+
+    <!-- RIGHT INSPECTOR & BOM PANEL -->
+    <aside id="side-panel" class="hidden lg:flex flex-col w-80 xl:w-88 h-full border-l z-30 sketch-box overflow-hidden" style="border-color: var(--border);">
+      <div class="p-3.5 border-b flex items-center justify-between" style="border-color: var(--border);">
+        <div>
+          <h2 class="font-mono-tech text-xs font-semibold uppercase tracking-wider">Camera &amp; Layout Inspector</h2>
+          <p class="text-[11px]" style="color: var(--ink-muted);">Scale: 1 grid cell = 1.0 meter</p>
+        </div>
+        <button id="btn-close-mobile" type="button" class="lg:hidden sketch-btn rounded px-2 py-0.5 text-xs font-mono-tech">✕</button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-3.5 space-y-4 no-scrollbar">
+        <!-- Selected Camera Editor -->
+        <div id="cam-editor" class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span id="cam-badge" class="font-mono-tech text-[10px] px-2 py-0.5 rounded border" style="border-color: var(--border);">CAM-01</span>
+            <button id="btn-delete-cam" type="button" class="sketch-btn rounded px-2 py-0.5 text-[11px] font-mono-tech" style="color: var(--accent);">Remove</button>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-mono-tech uppercase mb-1" style="color: var(--ink-muted);">Label</label>
+            <input id="inp-cam-label" type="text" class="sketch-input w-full rounded px-2.5 py-1 text-xs font-mono-tech" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] font-mono-tech uppercase mb-1" style="color: var(--ink-muted);">Mount Type</label>
+              <select id="inp-cam-type" class="sketch-input w-full rounded px-2 py-1 text-xs font-mono-tech">
+                <option value="dome">Dome (Indoor)</option>
+                <option value="bullet">Bullet (Outdoor)</option>
+                <option value="ptz">PTZ (Wide)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono-tech uppercase mb-1" style="color: var(--ink-muted);">Lens Preset</label>
+              <select id="inp-cam-lens" class="sketch-input w-full rounded px-2 py-1 text-xs font-mono-tech">
+                <option value="105">2.8mm (105°)</option>
+                <option value="80">4.0mm (80°)</option>
+                <option value="54">6.0mm (54°)</option>
+                <option value="28">12mm (28°)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <div class="flex justify-between text-[11px] font-mono-tech">
+              <span style="color: var(--ink-soft);">Aim Angle</span>
+              <span id="val-angle">0°</span>
+            </div>
+            <input id="inp-cam-angle" type="range" min="0" max="359" class="sketch-range w-full" />
+          </div>
+
+          <div class="space-y-1">
+            <div class="flex justify-between text-[11px] font-mono-tech">
+              <span style="color: var(--ink-soft);">Field of View (FOV)</span>
+              <span id="val-fov">90°</span>
+            </div>
+            <input id="inp-cam-fov" type="range" min="20" max="150" class="sketch-range w-full" />
+          </div>
+
+          <div class="space-y-1">
+            <div class="flex justify-between text-[11px] font-mono-tech">
+              <span style="color: var(--ink-soft);">Vision Range</span>
+              <span id="val-range">10 m</span>
+            </div>
+            <input id="inp-cam-range" type="range" min="3" max="24" step="0.5" class="sketch-range w-full" />
+          </div>
+        </div>
+
+        <div id="no-cam-msg" class="hidden text-xs font-mono-tech p-3 rounded border" style="border-color: var(--border); color: var(--ink-muted);">
+          Click a camera on the plan or use "+ Camera" to place one.
+        </div>
+
+        <!-- Camera List / BOM -->
+        <div class="pt-3 border-t space-y-2" style="border-color: var(--border);">
+          <div class="flex items-center justify-between">
+            <span class="font-mono-tech text-[10px] uppercase tracking-wider" style="color: var(--ink-muted);">Installed Cameras (<span id="bom-count">0</span>)</span>
+            <button id="btn-auto-optimize" type="button" class="sketch-btn rounded px-2 py-0.5 text-[10px] font-mono-tech" title="Slightly rotate cameras toward open space">Auto-Aim</button>
+          </div>
+          <ul id="cam-list" class="space-y-1.5 text-xs font-mono-tech"></ul>
+        </div>
+      </div>
+
+      <div class="p-3 border-t flex gap-2" style="border-color: var(--border);">
+        <button id="btn-clear-cams" type="button" class="sketch-btn flex-1 rounded py-1.5 text-xs font-mono-tech">Clear Cams</button>
+        <button id="btn-reset-plan" type="button" class="sketch-btn flex-1 rounded py-1.5 text-xs font-mono-tech">Reset Sample</button>
+      </div>
+    </aside>
+  </div>
+
+  <div id="toast" class="fixed bottom-4 right-4 z-50 sketch-box rounded px-3 py-2 text-xs font-mono-tech opacity-0 pointer-events-none transition-opacity duration-200"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // =========================================================
+      // 1. SAMPLE FLOORPLAN MODELS (Coordinates in meters)
+      // =========================================================
+      // Grid: 1 meter = 28 px (scaled dynamically to fit viewport)
+      const SAMPLES = {
+        house: {
+          name: '2BHK Modern House',
+          bounds: { w: 22, h: 15 },
+          nvr: { x: 11.2, y: 5.2 },
+          rooms: [
+            { label: 'LIVING ROOM', x: 5.5, y: 4.5 },
+            { label: 'KITCHEN', x: 15.5, y: 3.5 },
+            { label: 'MASTER BED', x: 5.0, y: 11.0 },
+            { label: 'BEDROOM 2', x: 15.5, y: 11.0 },
+            { label: 'PORCH / ENTRY', x: 10.5, y: 1.0 }
+          ],
+          walls: [
+            // Outer perimeter with front door gap (9.5..11.5 at y=2) and back door gap
+            [2, 2, 9.2, 2], [11.3, 2, 20, 2],
+            [20, 2, 20, 13.5], [20, 13.5, 2, 13.5], [2, 13.5, 2, 2],
+            // Living / Kitchen divider with doorway
+            [11.5, 2, 11.5, 4.5], [11.5, 6.2, 11.5, 8],
+            // Horizontal hallway wall with doorways
+            [2, 8, 6.8, 8], [8.5, 8, 13.5, 8], [15.2, 8, 20, 8],
+            // Bedroom divider
+            [11, 8, 11, 13.5],
+            // Structural pillar in living room
+            [6.5, 4.5, 7.2, 4.5], [7.2, 4.5, 7.2, 5.2], [7.2, 5.2, 6.5, 5.2], [6.5, 5.2, 6.5, 4.5],
+            // Front garden gate posts
+            [8.5, 0.5, 9.2, 0.5], [11.3, 0.5, 12.2, 0.5]
+          ],
+          cameras: [
+            { id: 'c1', label: 'Front Porch', type: 'bullet', x: 9.0, y: 2.2, angle: 315, fov: 95, range: 9 },
+            { id: 'c2', label: 'Living Hall', type: 'dome', x: 2.4, y: 2.4, angle: 42, fov: 105, range: 11 },
+            { id: 'c3', label: 'Rear Corridor', type: 'dome', x: 19.6, y: 8.3, angle: 165, fov: 85, range: 10 }
+          ]
+        },
+        retail: {
+          name: 'Retail Store & Stockroom',
+          bounds: { w: 24, h: 16 },
+          nvr: { x: 20.5, y: 3.0 },
+          rooms: [
+            { label: 'SHOWROOM', x: 8.5, y: 8.5 },
+            { label: 'CHECKOUT', x: 4.5, y: 3.8 },
+            { label: 'STOCKROOM', x: 19.5, y: 9.0 },
+            { label: 'OFFICE', x: 19.5, y: 3.5 }
+          ],
+          walls: [
+            [2, 2, 7.5, 2], [10.0, 2, 22, 2],
+            [22, 2, 22, 14], [22, 14, 17, 14], [14.8, 14, 2, 14], [2, 14, 2, 2],
+            // Stockroom wall
+            [16, 2, 16, 7.2], [16, 9.2, 16, 14],
+            // Office divider
+            [16, 5.5, 22, 5.5],
+            // Display aisles (occlude vision!)
+            [6, 6.5, 12, 6.5],
+            [6, 10.2, 12, 10.2],
+            // Checkout counter
+            [3, 4.5, 6.2, 4.5]
+          ],
+          cameras: [
+            { id: 'r1', label: 'Entrance & Till', type: 'dome', x: 2.4, y: 2.4, angle: 38, fov: 105, range: 10 },
+            { id: 'r2', label: 'Aisle Overview', type: 'bullet', x: 15.6, y: 13.6, angle: 215, fov: 90, range: 13 },
+            { id: 'r3', label: 'Stockroom Door', type: 'dome', x: 21.5, y: 13.5, angle: 225, fov: 85, range: 9 }
+          ]
+        },
+        blank: {
+          name: 'Blank Drafting Sheet',
+          bounds: { w: 22, h: 15 },
+          nvr: { x: 11, y: 7.5 },
+          rooms: [],
+          walls: [
+            [3, 2.5, 19, 2.5], [19, 2.5, 19, 12.5], [19, 12.5, 3, 12.5], [3, 12.5, 3, 2.5]
+          ],
+          cameras: [
+            { id: 'b1', label: 'CAM-01', type: 'dome', x: 3.5, y: 3.0, angle: 45, fov: 95, range: 10 }
+          ]
+        }
+      };
+
+      // =========================================================
+      // 2. STATE
+      // =========================================================
+      const state = {
+        theme: 'paper',
+        preset: 'house',
+        tool: 'select', // 'select' | 'add-cam' | 'draw-wall' | 'erase-wall'
+        irMode: false,
+        showCables: true,
+        snapGrid: true,
+        walls: [],
+        rooms: [],
+        cameras: [],
+        nvr: { x: 11, y: 5 },
+        bounds: { w: 22, h: 15 },
+        selectedCamId: null,
+        drawingWall: null,
+        camCounter: 4
+      };
+
+      // =========================================================
+      // 3. DOM & CANVAS SETUP
+      // =========================================================
+      const canvasWrap = document.getElementById('canvas-wrap');
+      const canvas = document.getElementById('plan-canvas');
+      const ctx = canvas.getContext('2d');
+      const toastEl = document.getElementById('toast');
+
+      let toastTimer = null;
+      function showToast(msg) {
+        toastEl.textContent = msg;
+        toastEl.style.opacity = '1';
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { toastEl.style.opacity = '0'; }, 2200);
+      }
+
+      // World <-> Screen transform
+      let viewScale = 32;
+      let offsetX = 40;
+      let offsetY = 40;
+
+      function computeViewport() {
+        const rect = canvasWrap.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const pad = 44;
+        const sx = (rect.width - pad * 2) / state.bounds.w;
+        const sy = (rect.height - pad * 2) / state.bounds.h;
+        viewScale = Math.max(16, Math.min(sx, sy));
+        offsetX = (rect.width - state.bounds.w * viewScale) / 2;
+        offsetY = (rect.height - state.bounds.h * viewScale) / 2;
+      }
+
+      function toScreen(mx, my) {
+        return { x: offsetX + mx * viewScale, y: offsetY + my * viewScale };
+      }
+
+      function toWorld(sx, sy) {
+        let mx = (sx - offsetX) / viewScale;
+        let my = (sy - offsetY) / viewScale;
+        if (state.snapGrid) {
+          mx = Math.round(mx * 4) / 4; // 0.25m snap
+          my = Math.round(my * 4) / 4;
+        }
+        return { x: mx, y: my };
+      }
+
+      // =========================================================
+      // 4. 2D RAYCASTING ENGINE (WALL-OCCLUDED VISION CONE)
+      // =========================================================
+      function raySegmentIntersect(ox, oy, dx, dy, x1, y1, x2, y2) {
+        const vx = x2 - x1;
+        const vy = y2 - y1;
+        const denom = dx * vy - dy * vx;
+        if (Math.abs(denom) < 1e-8) return null;
+        const t = ((x1 - ox) * vy - (y1 - oy) * vx) / denom;
+        const u = ((x1 - ox) * dy - (y1 - oy) * dx) / denom;
+        if (t >= 0 && u >= 0 && u <= 1) return t;
+        return null;
+      }
+
+      function computeVisionPolygon(cam) {
+        const effRange = state.irMode ? cam.range * 0.72 : cam.range;
+        const halfFov = (cam.fov * Math.PI) / 360;
+        const centerRad = (cam.angle * Math.PI) / 180;
+        const rays = 64;
+        const pts = [{ x: cam.x, y: cam.y }];
+
+        for (let i = 0; i <= rays; i++) {
+          const a = centerRad - halfFov + (i / rays) * (halfFov * 2);
+          const dx = Math.cos(a);
+          const dy = Math.sin(a);
+          let minT = effRange;
+
+          for (const w of state.walls) {
+            const t = raySegmentIntersect(cam.x, cam.y, dx, dy, w[0], w[1], w[2], w[3]);
+            if (t !== null && t < minT) minT = t;
+          }
+          pts.push({ x: cam.x + dx * minT, y: cam.y + dy * minT });
+        }
+        return pts;
+      }
+
+      // Point-in-polygon for coverage sampling
+      function pointInPoly(px, py, poly) {
+        let inside = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+          const xi = poly[i].x, yi = poly[i].y;
+          const xj = poly[j].x, yj = poly[j].y;
+          const intersect = ((yi > py) !== (yj > py)) && (px < ((xj - xi) * (py - yi)) / (yj - yi + 1e-9) + xi);
+          if (intersect) inside = !inside;
+        }
+        return inside;
+      }
+
+      function computeCoverageMetrics(polys) {
+        // Sample inside main floorplan area (2..w-2, 2..h-2)
+        const minX = 2.2, maxX = state.bounds.w - 2.2;
+        const minY = 2.2, maxY = state.bounds.h - 2.2;
+        const step = 0.65;
+        let total = 0, covered = 0, overlap = 0;
+
+        for (let x = minX; x <= maxX; x += step) {
+          for (let y = minY; y <= maxY; y += step) {
+            total++;
+            let hits = 0;
+            for (const p of polys) {
+              if (pointInPoly(x, y, p)) hits++;
+            }
+            if (hits >= 1) covered++;
+            if (hits >= 2) overlap++;
+          }
+        }
+
+        const covPct = total ? Math.round((covered / total) * 100) : 0;
+        const ovPct = total ? Math.round((overlap / total) * 100) : 0;
+        const blindPct = Math.max(0, 100 - covPct);
+
+        let cableMeters = 0;
+        for (const c of state.cameras) {
+          // Manhattan + 2.5m ceiling drop allowance
+          cableMeters += Math.abs(c.x - state.nvr.x) + Math.abs(c.y - state.nvr.y) + 2.5;
+        }
+
+        document.getElementById('hud-coverage').textContent = `${covPct}%`;
+        document.getElementById('hud-overlap').textContent = `${ovPct}%`;
+        document.getElementById('hud-blind').textContent = `${blindPct}%`;
+        document.getElementById('hud-cable').textContent = `${Math.round(cableMeters)} m`;
+      }
+
+      // =========================================================
+      // 5. SKETCH RENDERER
+      // =========================================================
+      function render() {
+        const rect = canvasWrap.getBoundingClientRect();
+        const isCharcoal = state.theme === 'charcoal';
+        const ink = isCharcoal ? '#f0ede6' : '#1b1a17';
+        const inkSoft = isCharcoal ? 'rgba(240,237,230,0.5)' : 'rgba(27,26,23,0.5)';
+        const gridColor = isCharcoal ? 'rgba(240,237,230,0.055)' : 'rgba(27,26,23,0.06)';
+        const fovFill = state.irMode
+          ? (isCharcoal ? 'rgba(100, 184, 133, 0.16)' : 'rgba(42, 122, 75, 0.14)')
+          : (isCharcoal ? 'rgba(240, 237, 230, 0.14)' : 'rgba(27, 26, 23, 0.12)');
+        const accent = isCharcoal ? '#e05a47' : '#c83e2b';
+
+        ctx.clearRect(0, 0, rect.width, rect.height);
+
+        // 1. Drafting Grid (1m cells)
+        ctx.strokeStyle = gridColor;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let x = 0; x <= state.bounds.w; x++) {
+          const sx = offsetX + x * viewScale;
+          ctx.moveTo(sx, 0);
+          ctx.lineTo(sx, rect.height);
+        }
+        for (let y = 0; y <= state.bounds.h; y++) {
+          const sy = offsetY + y * viewScale;
+          ctx.moveTo(0, sy);
+          ctx.lineTo(rect.width, sy);
+        }
+        ctx.stroke();
+
+        // 2. Room Labels
+        ctx.fillStyle = inkSoft;
+        ctx.font = '500 10px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        for (const r of state.rooms) {
+          const p = toScreen(r.x, r.y);
+          ctx.fillText(r.label, p.x, p.y);
+        }
+
+        // 3. Vision Cones (Raycasted & Wall-Occluded)
+        const polys = [];
+        for (const cam of state.cameras) {
+          const poly = computeVisionPolygon(cam);
+          polys.push(poly);
+
+          ctx.beginPath();
+          poly.forEach((pt, idx) => {
+            const sp = toScreen(pt.x, pt.y);
+            if (idx === 0) ctx.moveTo(sp.x, sp.y);
+            else ctx.lineTo(sp.x, sp.y);
+          });
+          ctx.closePath();
+          ctx.fillStyle = fovFill;
+          ctx.fill();
+
+          ctx.strokeStyle = cam.id === state.selectedCamId ? accent : inkSoft;
+          ctx.lineWidth = cam.id === state.selectedCamId ? 1.4 : 0.9;
+          ctx.setLineDash([4, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // 4. PoE Cable Runs (from NVR Hub to each camera)
+        if (state.showCables) {
+          const nvrP = toScreen(state.nvr.x, state.nvr.y);
+          ctx.strokeStyle = accent;
+          ctx.lineWidth = 1.1;
+          ctx.globalAlpha = 0.55;
+          ctx.setLineDash([3, 4]);
+          for (const cam of state.cameras) {
+            const cp = toScreen(cam.x, cam.y);
+            ctx.beginPath();
+            ctx.moveTo(nvrP.x, nvrP.y);
+            ctx.lineTo(cp.x, nvrP.y);
+            ctx.lineTo(cp.x, cp.y);
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+        }
+
+        // 5. Architectural Pencil-Sketch Walls (Double-pass for hand-drawn feel)
+        ctx.strokeStyle = ink;
+        ctx.lineCap = 'round';
+        for (const w of state.walls) {
+          const p1 = toScreen(w[0], w[1]);
+          const p2 = toScreen(w[2], w[3]);
+
+          ctx.lineWidth = 2.6;
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+
+          ctx.lineWidth = 0.8;
+          ctx.globalAlpha = 0.45;
+          ctx.beginPath();
+          ctx.moveTo(p1.x + 1.2, p1.y - 1.0);
+          ctx.lineTo(p2.x - 1.0, p2.y + 1.2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+
+        // Preview wall while drawing
+        if (state.drawingWall) {
+          const p1 = toScreen(state.drawingWall.x1, state.drawingWall.y1);
+          const p2 = toScreen(state.drawingWall.x2, state.drawingWall.y2);
+          ctx.strokeStyle = accent;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // 6. NVR / PoE Hub Marker
+        const nvrS = toScreen(state.nvr.x, state.nvr.y);
+        ctx.fillStyle = isCharcoal ? '#1c1c1a' : '#fbf9f4';
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = 1.6;
+        ctx.fillRect(nvrS.x - 10, nvrS.y - 8, 20, 16);
+        ctx.strokeRect(nvrS.x - 10, nvrS.y - 8, 20, 16);
+        ctx.fillStyle = ink;
+        ctx.font = '600 8px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('NVR', nvrS.x, nvrS.y + 3);
+
+        // 7. Cameras + Aim Handles
+        for (const cam of state.cameras) {
+          const cp = toScreen(cam.x, cam.y);
+          const isSel = cam.id === state.selectedCamId;
+          const rad = (cam.angle * Math.PI) / 180;
+
+          // Aim handle
+          const handleDist = 26;
+          const hx = cp.x + Math.cos(rad) * handleDist;
+          const hy = cp.y + Math.sin(rad) * handleDist;
+
+          ctx.strokeStyle = isSel ? accent : ink;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(cp.x, cp.y);
+          ctx.lineTo(hx, hy);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(hx, hy, 4.5, 0, Math.PI * 2);
+          ctx.fillStyle = isSel ? accent : (isCharcoal ? '#141413' : '#f5f2eb');
+          ctx.fill();
+          ctx.stroke();
+
+          // Camera body
+          ctx.beginPath();
+          ctx.arc(cp.x, cp.y, 8, 0, Math.PI * 2);
+          ctx.fillStyle = isSel ? ink : (isCharcoal ? '#1c1c1a' : '#fbf9f4');
+          ctx.fill();
+          ctx.lineWidth = 1.8;
+          ctx.strokeStyle = isSel ? accent : ink;
+          ctx.stroke();
+
+          // Label
+          ctx.fillStyle = ink;
+          ctx.font = '500 10px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(cam.label, cp.x, cp.y - 13);
+        }
+
+        computeCoverageMetrics(polys);
+      }
+
+      // =========================================================
+      // 6. POINTER INTERACTIONS (MOVE, AIM, DRAW, ERASE)
+      // =========================================================
+      let dragMode = null; // 'cam' | 'aim' | 'nvr' | 'wall'
+
+      function distToSeg(px, py, x1, y1, x2, y2) {
+        const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+        if (l2 === 0) return Math.hypot(px - x1, py - y1);
+        let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+      }
+
+      canvas.addEventListener('pointerdown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        canvas.setPointerCapture(e.pointerId);
+
+        if (state.tool === 'add-cam') {
+          const w = toWorld(sx, sy);
+          const id = 'cam_' + Date.now();
+          const newCam = {
+            id,
+            label: `CAM-0${state.camCounter++}`,
+            type: 'dome',
+            x: w.x,
+            y: w.y,
+            angle: 45,
+            fov: 90,
+            range: 10
+          };
+          state.cameras.push(newCam);
+          state.selectedCamId = id;
+          setTool('select');
+          syncInspector();
+          render();
+          showToast(`Placed ${newCam.label}`);
+          return;
+        }
+
+        if (state.tool === 'draw-wall') {
+          const w = toWorld(sx, sy);
+          dragMode = 'wall';
+          state.drawingWall = { x1: w.x, y1: w.y, x2: w.x, y2: w.y };
+          render();
+          return;
+        }
+
+        if (state.tool === 'erase-wall') {
+          const w = toWorld(sx, sy);
+          const idx = state.walls.findIndex((seg) => distToSeg(w.x, w.y, seg[0], seg[1], seg[2], seg[3]) < 0.55);
+          if (idx !== -1) {
+            state.walls.splice(idx, 1);
+            render();
+            showToast('Wall removed');
+          }
+          return;
+        }
+
+        // Select / Move / Aim
+        // 1. Check aim handles first
+        for (const cam of state.cameras) {
+          const cp = toScreen(cam.x, cam.y);
+          const rad = (cam.angle * Math.PI) / 180;
+          const hx = cp.x + Math.cos(rad) * 26;
+          const hy = cp.y + Math.sin(rad) * 26;
+          if (Math.hypot(sx - hx, sy - hy) < 13) {
+            state.selectedCamId = cam.id;
+            dragMode = 'aim';
+            syncInspector();
+            render();
+            return;
+          }
+        }
+
+        // 2. Check camera bodies
+        for (const cam of state.cameras) {
+          const cp = toScreen(cam.x, cam.y);
+          if (Math.hypot(sx - cp.x, sy - cp.y) < 15) {
+            state.selectedCamId = cam.id;
+            dragMode = 'cam';
+            syncInspector();
+            render();
+            return;
+          }
+        }
+
+        // 3. Check NVR hub
+        const nvrS = toScreen(state.nvr.x, state.nvr.y);
+        if (Math.hypot(sx - nvrS.x, sy - nvrS.y) < 16) {
+          dragMode = 'nvr';
+          return;
+        }
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        if (!dragMode) return;
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+
+        if (dragMode === 'wall' && state.drawingWall) {
+          const w = toWorld(sx, sy);
+          state.drawingWall.x2 = w.x;
+          state.drawingWall.y2 = w.y;
+          render();
+          return;
+        }
+
+        if (dragMode === 'nvr') {
+          const w = toWorld(sx, sy);
+          state.nvr.x = w.x;
+          state.nvr.y = w.y;
+          render();
+          return;
+        }
+
+        const cam = state.cameras.find((c) => c.id === state.selectedCamId);
+        if (!cam) return;
+
+        if (dragMode === 'cam') {
+          const w = toWorld(sx, sy);
+          cam.x = w.x;
+          cam.y = w.y;
+          render();
+        } else if (dragMode === 'aim') {
+          const cp = toScreen(cam.x, cam.y);
+          let deg = Math.round((Math.atan2(sy - cp.y, sx - cp.x) * 180) / Math.PI);
+          if (deg < 0) deg += 360;
+          cam.angle = deg;
+          syncInspector();
+          render();
+        }
+      });
+
+      canvas.addEventListener('pointerup', (e) => {
+        if (dragMode === 'wall' && state.drawingWall) {
+          const d = state.drawingWall;
+          if (Math.hypot(d.x2 - d.x1, d.y2 - d.y1) > 0.4) {
+            state.walls.push([d.x1, d.y1, d.x2, d.y2]);
+          }
+          state.drawingWall = null;
+          render();
+        }
+        dragMode = null;
+        try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      });
+
+      // =========================================================
+      // 7. INSPECTOR & CONTROLS SYNC
+      // =========================================================
+      const camEditor = document.getElementById('cam-editor');
+      const noCamMsg = document.getElementById('no-cam-msg');
+      const camList = document.getElementById('cam-list');
+      const inpLabel = document.getElementById('inp-cam-label');
+      const inpType = document.getElementById('inp-cam-type');
+      const inpLens = document.getElementById('inp-cam-lens');
+      const inpAngle = document.getElementById('inp-cam-angle');
+      const inpFov = document.getElementById('inp-cam-fov');
+      const inpRange = document.getElementById('inp-cam-range');
+
+      function syncInspector() {
+        document.getElementById('bom-count').textContent = String(state.cameras.length);
+
+        camList.innerHTML = state.cameras.map((c, idx) => {
+          const active = c.id === state.selectedCamId;
+          return `<li>
+            <button type="button" data-select-cam="${c.id}" class="sketch-btn ${active ? 'active' : ''} w-full rounded px-2.5 py-1.5 flex items-center justify-between text-left">
+              <span class="truncate">${idx + 1}. ${c.label}</span>
+              <span class="text-[10px] opacity-75">${c.fov}° · ${c.range}m</span>
+            </button>
+          </li>`;
+        }).join('');
+
+        const cam = state.cameras.find((c) => c.id === state.selectedCamId);
+        if (!cam) {
+          camEditor.classList.add('hidden');
+          noCamMsg.classList.remove('hidden');
+          return;
+        }
+        camEditor.classList.remove('hidden');
+        noCamMsg.classList.add('hidden');
+
+        document.getElementById('cam-badge').textContent = cam.type.toUpperCase();
+        inpLabel.value = cam.label;
+        inpType.value = cam.type;
+        inpAngle.value = cam.angle;
+        inpFov.value = cam.fov;
+        inpRange.value = cam.range;
+        document.getElementById('val-angle').textContent = `${cam.angle}°`;
+        document.getElementById('val-fov').textContent = `${cam.fov}°`;
+        document.getElementById('val-range').textContent = `${cam.range} m`;
+      }
+
+      camList.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-select-cam]');
+        if (!btn) return;
+        state.selectedCamId = btn.dataset.selectCam;
+        syncInspector();
+        render();
+      });
+
+      inpLabel.addEventListener('input', (e) => {
+        const cam = state.cameras.find((c) => c.id === state.selectedCamId);
+        if (cam) { cam.label = e.target.value; syncInspector(); render(); }
+      });
+
+      inpType.addEventListener('change', (e) => {
+        const cam = state.cameras.find((c) => c.id === state.selectedCamId);
+        if (cam) { cam.type = e.target.value; syncInspector(); render(); }
+      });
+
+      inpLens.addEventListener('change', (e) => {
+        const cam = state.cameras.find((c) => c.id === state.selectedCamId);
+        if (cam) { cam.fov = Number(e.target.value); syncInspector(); render(); }
+      });
+
+      inpAngle.addEventListener('input', (e) => {
+        const cam = state.cameras.find((c) => c.id === state.selectedCamId);
+        if (cam) { cam.angle = Number(e.target.value); syncInspector(); render(); }
+      });
+
+      inpFov.addEventListener('input', (e) => {
+        const cam = state.cameras.find((c) => c.id === state.selectedCamId);
+        if (cam) { cam.fov = Number(e.target.value); syncInspector(); render(); }
+      });
+
+      inpRange.addEventListener('input', (e) => {
+        const cam = state.cameras.find((c) => c.id === state.selectedCamId);
+        if (cam) { cam.range = Number(e.target.value); syncInspector(); render(); }
+      });
+
+      document.getElementById('btn-delete-cam').addEventListener('click', () => {
+        state.cameras = state.cameras.filter((c) => c.id !== state.selectedCamId);
+        state.selectedCamId = state.cameras[0] ? state.cameras[0].id : null;
+        syncInspector();
+        render();
+      });
+
+      // Auto-Aim each camera toward the longest unobstructed ray direction
+      document.getElementById('btn-auto-optimize').addEventListener('click', () => {
+        for (const cam of state.cameras) {
+          let bestAngle = cam.angle;
+          let bestScore = -1;
+          for (let deg = 0; deg < 360; deg += 15) {
+            const rad = (deg * Math.PI) / 180;
+            let score = 0;
+            for (let sub = -2; sub <= 2; sub++) {
+              const a = rad + sub * 0.22;
+              let minT = cam.range;
+              for (const w of state.walls) {
+                const t = raySegmentIntersect(cam.x, cam.y, Math.cos(a), Math.sin(a), w[0], w[1], w[2], w[3]);
+                if (t !== null && t < minT) minT = t;
+              }
+              score += minT;
+            }
+            if (score > bestScore) { bestScore = score; bestAngle = deg; }
+          }
+          cam.angle = bestAngle;
+        }
+        syncInspector();
+        render();
+        showToast('Cameras auto-aimed toward open sightlines');
+      });
+
+      // Toolbar buttons
+      function setTool(t) {
+        state.tool = t;
+        document.querySelectorAll('button[data-tool]').forEach((b) => {
+          b.classList.toggle('active', b.dataset.tool === t);
+        });
+        canvas.style.cursor = t === 'select' ? 'default' : 'crosshair';
+      }
+      document.querySelectorAll('button[data-tool]').forEach((b) => {
+        b.addEventListener('click', () => setTool(b.dataset.tool));
+      });
+
+      document.getElementById('btn-ir').addEventListener('click', (e) => {
+        state.irMode = !state.irMode;
+        e.currentTarget.classList.toggle('active', state.irMode);
+        e.currentTarget.textContent = state.irMode ? 'IR Night' : 'Daylight';
+        render();
+      });
+
+      document.getElementById('btn-cables').addEventListener('click', (e) => {
+        state.showCables = !state.showCables;
+        e.currentTarget.classList.toggle('active', state.showCables);
+        render();
+      });
+
+      document.getElementById('btn-snap').addEventListener('click', (e) => {
+        state.snapGrid = !state.snapGrid;
+        e.currentTarget.classList.toggle('active', state.snapGrid);
+        e.currentTarget.textContent = state.snapGrid ? 'Snap: On' : 'Snap: Off';
+      });
+
+      document.getElementById('btn-theme').addEventListener('click', (e) => {
+        state.theme = state.theme === 'paper' ? 'charcoal' : 'paper';
+        document.body.classList.toggle('theme-charcoal', state.theme === 'charcoal');
+        e.currentTarget.textContent = state.theme === 'charcoal' ? 'Charcoal' : 'Paper';
+        render();
+      });
+
+      document.getElementById('btn-export-png').addEventListener('click', () => {
+        try {
+          const url = canvas.toDataURL('image/png');
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `sightline_${state.preset}_plan.png`;
+          a.click();
+          showToast('Exported floorplan PNG');
+        } catch (_) {}
+      });
+
+      document.getElementById('btn-clear-cams').addEventListener('click', () => {
+        state.cameras = [];
+        state.selectedCamId = null;
+        syncInspector();
+        render();
+      });
+
+      function loadPreset(key) {
+        const p = SAMPLES[key] || SAMPLES.house;
+        state.preset = key;
+        state.bounds = structuredClone(p.bounds);
+        state.nvr = structuredClone(p.nvr);
+        state.rooms = structuredClone(p.rooms);
+        state.walls = structuredClone(p.walls);
+        state.cameras = structuredClone(p.cameras);
+        state.selectedCamId = state.cameras[0] ? state.cameras[0].id : null;
+        computeViewport();
+        syncInspector();
+        render();
+      }
+
+      document.getElementById('select-preset').addEventListener('change', (e) => loadPreset(e.target.value));
+      document.getElementById('btn-reset-plan').addEventListener('click', () => loadPreset(state.preset));
+
+      // Mobile drawer
+      const sidePanel = document.getElementById('side-panel');
+      document.getElementById('btn-mobile-panel').addEventListener('click', () => {
+        sidePanel.classList.remove('hidden');
+        sidePanel.classList.add('fixed', 'inset-x-0', 'bottom-0', 'h-[62vh]', 'flex', 'w-full');
+      });
+      document.getElementById('btn-close-mobile').addEventListener('click', () => {
+        sidePanel.classList.add('hidden');
+        sidePanel.classList.remove('fixed', 'inset-x-0', 'bottom-0', 'h-[62vh]', 'flex', 'w-full');
+      });
+
+      window.addEventListener('resize', () => { computeViewport(); render(); });
+
+      // Init
+      loadPreset('house');
+    })();
+  </script>
+</body>
+</html>
